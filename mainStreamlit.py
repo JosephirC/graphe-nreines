@@ -62,7 +62,7 @@ if "solutions" in st.session_state:
     st.write(f"**Solution {idx} :** {sol}")
 
     # Affichage graphique de l’échiquier
-    st.markdown("### 🧩 Échiquier")
+    st.markdown("### Échiquier")
     for i in range(n):
         row = ""
         for j in range(n):
