@@ -51,4 +51,4 @@ if __name__ == "__main__":
     print(f"Nombre de solutions trouvées: {len(solutions)}")
     for idx, solution in enumerate(solutions):
         print(f"Solution {idx + 1}: {solution}")
-    print(f"Temps d'exécution: {wall_time} ms")
+    print(f"Temps d'exécution: {wall_time:.6f} s")
