@@ -37,6 +37,7 @@ class MinConflictsSolver(IncompleteSolver):
         seed: Optional[int] = None,
         noise: float = 0.10,
         max_steps: int = 20000,
+        pick_policy: str = "random"  # "random" | "max_conflict"
     ):
         super().__init__(n, symmetry_breaking, seed)
 
@@ -49,6 +50,12 @@ class MinConflictsSolver(IncompleteSolver):
         self.max_steps = int(max_steps)
 
         self._rng = random.Random(seed)
+        
+        allowed = {"random", "max_conflict"}
+        if pick_policy not in allowed:
+            raise ValueError(f"pick_policy doit être dans {allowed} (reçu {pick_policy})")
+        self.pick_policy = pick_policy
+
 
     @property
     def method_id(self) -> str:
@@ -257,7 +264,21 @@ class MinConflictsSolver(IncompleteSolver):
                     break
 
                 # choose a conflicting variable (row)
-                r = self._rng.choice(conflicted_rows)
+                if self.pick_policy == "random":
+                    r = self._rng.choice(conflicted_rows)
+                else:
+                    # max-conflict
+                    best = []
+                    best_c = -1
+                    for rr in conflicted_rows:
+                        cc = self._row_conflicts(rr, sol[rr], col_count, d1_count, d2_count)
+                        if cc > best_c:
+                            best_c = cc
+                            best = [rr]
+                        elif cc == best_c:
+                            best.append(rr)
+                    r = self._rng.choice(best)
+
 
                 # choose move
                 if self._rng.random() < self.noise:
@@ -294,6 +315,7 @@ class MinConflictsSolver(IncompleteSolver):
                 "algorithm_name": self.algorithm_name,
                 "n": self.n,
                 "symmetry_breaking": self.symmetry_breaking,
+                "pick_policy": self.pick_policy,
                 "seed": self.seed,
                 "noise": self.noise,
                 "max_steps": self.max_steps,

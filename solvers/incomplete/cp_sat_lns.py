@@ -145,6 +145,7 @@ class CPSatLNSSolver(IncompleteSolver):
                     "method_id": self.method_id,
                     "reason": "no_initial_solution",
                     "neighborhood_size": self.neighborhood_size,
+                    "neighborhood_policy": self.neighborhood_policy,
                     "time_limit_per_iteration": self.time_limit_per_iteration,
                     "initial_time_limit": initial_time_limit,
                     "seed": self.seed
