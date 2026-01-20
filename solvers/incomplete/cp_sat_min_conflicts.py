@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 import time
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from ..base_solver import IncompleteSolver, SolverResult
 
@@ -19,7 +19,7 @@ class MinConflictsSolver(IncompleteSolver):
       - variable = ligne i
       - valeur = colonne sol[i] dans [0..n-1]
 
-    Algorithme (Minton 1992 - version classique):
+    Algorithme:
       - Initialisation aléatoire
       - Tant qu'il reste des conflits:
           - choisir une ligne en conflit
@@ -36,7 +36,7 @@ class MinConflictsSolver(IncompleteSolver):
         seed: Optional[int] = None,
         noise: float = 0.10,
         max_steps: int = 20000,
-        pick_policy: str = "random"  # "random" | "max_conflict"
+        pick_policy: str = "random",  # "random" | "max_conflict"
     ):
         super().__init__(n, symmetry_breaking, seed)
 
@@ -45,16 +45,15 @@ class MinConflictsSolver(IncompleteSolver):
         if max_steps <= 0:
             raise ValueError(f"max_steps doit être > 0 (reçu {max_steps})")
 
-        self.noise = float(noise)
-        self.max_steps = int(max_steps)
-
-        self._rng = random.Random(seed)
-
         allowed = {"random", "max_conflict"}
         if pick_policy not in allowed:
             raise ValueError(
                 f"pick_policy doit être dans {allowed} (reçu {pick_policy})")
+
+        self.noise = float(noise)
+        self.max_steps = int(max_steps)
         self.pick_policy = pick_policy
+        self._rng = random.Random(seed)
 
     @property
     def method_id(self) -> str:
@@ -117,12 +116,18 @@ class MinConflictsSolver(IncompleteSolver):
             or d2_count[self._diag2(r, c)] > 1
         )
 
+    # symmetry breaking (partiel) helper
+    def _row0_max_col_if_symmetry(self) -> int:
+        # Symmetry breaking partiel: impose seulement q0 dans la moitié gauche.
+        # (Ça réduit la symétrie miroir gauche-droite, mais ne supprime pas toutes les symétries.)
+        return (self.n - 1) // 2
+
     def _random_initial_solution(self) -> Solution:
         sol = [0] * self.n
         if self.symmetry_breaking:
             # simple symmetry breaking: row 0 in left half
             max_c = (self.n - 1) // 2
-            sol[0] = self._rng.randint(0, max_c)
+            sol[0] = self._rng.randint(0, self._row0_max_col_if_symmetry())
             start = 1
         else:
             start = 0
@@ -159,15 +164,14 @@ class MinConflictsSolver(IncompleteSolver):
 
         # symmetry breaking constraint applies only to row 0
         if self.symmetry_breaking and r == 0:
-            col_iter = range(0, (self.n - 1) // 2 + 1)
+            col_iter = range(0, self._row0_max_col_if_symmetry() + 1)
         else:
             col_iter = range(self.n)
 
         for c in col_iter:
             # compute conflicts if we place at (r,c) with counts excluding row r
-            score = col_count[c] + \
-                d1_count.get(self._diag1(r, c), 0) + \
-                d2_count[self._diag2(r, c)]
+            score = col_count[c] + d1_count.get(
+                self._diag1(r, c), 0) + d2_count[self._diag2(r, c)]
             # score is number of other queens attacking this position
             if best_score is None or score < best_score:
                 best_score = score
@@ -212,6 +216,11 @@ class MinConflictsSolver(IncompleteSolver):
 
     def solve(self, time_limit: float = 45.0) -> SolverResult:
         tag = self.method_id
+
+        symmetry_note = "none"
+        if self.symmetry_breaking:
+            symmetry_note = "partial(row0_left_half)"
+
         self.logger.info(
             f"[{tag}] Démarrage Min-Conflicts pour N={self.n}, "
             f"noise={self.noise}, max_steps={self.max_steps}, "
@@ -267,23 +276,24 @@ class MinConflictsSolver(IncompleteSolver):
                     r = self._rng.choice(conflicted_rows)
                 else:
                     # max-conflict
-                    best = []
+                    best_rows = []
                     best_c = -1
                     for rr in conflicted_rows:
                         cc = self._row_conflicts(
                             rr, sol[rr], col_count, d1_count, d2_count)
                         if cc > best_c:
                             best_c = cc
-                            best = [rr]
+                            best_rows = [rr]
                         elif cc == best_c:
-                            best.append(rr)
-                    r = self._rng.choice(best)
+                            best_rows.append(rr)
+                    r = self._rng.choice(best_rows)
 
                 # choose move
                 if self._rng.random() < self.noise:
                     # random move (diversification)
                     if self.symmetry_breaking and r == 0:
-                        new_c = self._rng.randint(0, (self.n - 1) // 2)
+                        new_c = self._rng.randint(
+                            0, self._row0_max_col_if_symmetry())
                     else:
                         new_c = self._rng.randrange(self.n)
                 else:
@@ -314,12 +324,15 @@ class MinConflictsSolver(IncompleteSolver):
                 "algorithm_name": self.algorithm_name,
                 "n": self.n,
                 "symmetry_breaking": self.symmetry_breaking,
+                "symmetry_breaking_note": "partial: row0 in left half" if self.symmetry_breaking else "none",
                 "pick_policy": self.pick_policy,
                 "seed": self.seed,
                 "noise": self.noise,
                 "max_steps": self.max_steps,
                 "restarts": restarts,
                 "steps": total_steps,
+                "iterations_definition": "1 step = 1 local move (not a search tree node)",
+                "nodes_explored_note": "compat_field_only; alias_of_steps",
                 "unique_solutions_collected": len(unique_keys),
                 "solutions_collected": len(solutions),
             },
@@ -335,8 +348,8 @@ if __name__ == "__main__":
     print("=" * 70)
 
     solver = CPSatMinConflictsSolver(
-        n=14, symmetry_breaking=False, seed=42, noise=0.15, max_steps=30000)
-    result = solver.solve(time_limit=5.0)
+        n=14, symmetry_breaking=False, seed=42, noise=0.15, max_steps=30000, pick_policy="max_conflict")
+    result = solver.solve(time_limit=45.0)
     print(result)
     print(
         f"\nSolutions valides uniques en 5s: {result.num_unique_solutions()}")

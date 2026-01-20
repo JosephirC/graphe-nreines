@@ -16,7 +16,7 @@ class CPSatLNSSolver(IncompleteSolver):
     Solveur Large Neighborhood Search avec CP-SAT
 
     Principe:
-    1. Trouver une solution initiale (ou partir d'une assignation)
+    1. Trouver une solution initiale
     2. Itérer:
        a. Fixer une grande partie des variables
        b. Relâcher un sous-ensemble (le "voisinage")
@@ -24,9 +24,9 @@ class CPSatLNSSolver(IncompleteSolver):
     3. Garder les solutions valides trouvées et compter les distinctes
 
     Paramètres exposés :
-    - neighborhood_size: % de variables relâchées (ou nb de lignes relâchées)
+    - neighborhood_size: fraction de variables relâchées (0 < size < 1)
     - time_limit_per_iteration: temps max par réparation
-    - max_iterations (ou time_limit global 45s)
+    - max_iterations : nombre max d'itérations LNS par run
     - seed: pour randomisation du voisinage
 
     Sorties benchmark :
@@ -90,7 +90,8 @@ class CPSatLNSSolver(IncompleteSolver):
         self,
         time_limit: float = 45.0,
         max_iterations: Optional[int] = None,
-        initial_time_limit: float = 5.0
+        initial_time_limit: float = 5.0,
+        multistart: bool = False,
     ) -> SolverResult:
         """
         Résout avec LNS
@@ -99,7 +100,7 @@ class CPSatLNSSolver(IncompleteSolver):
             time_limit: Limite de temps globale (45s benchmark)
             max_iterations: Nombre max d'itérations LNS (None = jusqu'à timeout)
             initial_time_limit: Temps pour solution initiale
-
+            multistart: Activer multistart (recherche de plusieurs solutions itérativement)
         Returns:
             SolverResult avec métriques benchmark
         """
@@ -109,10 +110,14 @@ class CPSatLNSSolver(IncompleteSolver):
             f"neighborhood={self.neighborhood_size*100:.0f}%, "
             f"policy={self.neighborhood_policy}, "
             f"symmetry_breaking={self.symmetry_breaking}, "
+            f"multistart={multistart}, "
             f"time_limit={time_limit}s, per_iter={self.time_limit_per_iteration}s"
         )
 
         start_time = time.time()
+        deadline = start_time + time_limit
+
+        # reset apprentissage si besoin
         if self.neighborhood_policy == "unstable_relax":
             self.change_count = [0] * self.n
 
@@ -128,112 +133,147 @@ class CPSatLNSSolver(IncompleteSolver):
         repairs_success = 0
         repairs_fail = 0
 
-        # ========== ÉTAPE 1: SOLUTION INITIALE ==========
-        current_solution, nodes = self._find_initial_solution(
-            time_limit=initial_time_limit)
+        restarts = 0
+        global_iteration = 0
 
-        initial_nodes += nodes
-        total_nodes += nodes
+        STAGNATION_THRESHOLD = 200
 
-        if current_solution is None:
-            self.logger.warning(
-                f"[{tag}] Échec de la recherche de solution initiale")
-            return SolverResult(
-                solutions=[],
-                unique_solutions=set(),
-                execution_time=time.time() - start_time,
-                time_to_first_solution=None,
-                iterations=0,
-                nodes_explored=total_nodes,
-                success=False,
-                metadata={
-                    "method_id": self.method_id,
-                    "algorithm_name": self.algorithm_name,
-                    "n": self.n,
-                    "symmetry_breaking": self.symmetry_breaking,
-                    "reason": "no_initial_solution",
-                    "neighborhood_size": self.neighborhood_size,
-                    "neighborhood_policy": self.neighborhood_policy,
-                    "time_limit_per_iteration": self.time_limit_per_iteration,
-                    "initial_time_limit": initial_time_limit,
-                    "max_iterations": max_iterations,
-                    "seed": self.seed,
-                },
-            )
+        # Boucle multi-start: si multistart=False -> un seul run (break à la fin)
+        while time.time() < deadline:
+            restarts += 1
 
-        # Avec les contraintes CP-SAT complètes, toute solution trouvée est valide.
-        key0 = self.solution_key(current_solution)
-        unique_keys.add(key0)
-        all_solutions.append(current_solution)
-        time_to_first = time.time() - start_time
-        self.logger.info(
-            f"[{tag}] Solution initiale trouvée en {time_to_first:.4f}s")
-
-        # ========== ÉTAPE 2: ITÉRATIONS LNS ==========
-        iteration = 0
-        while True:
-            elapsed = time.time() - start_time
-            if elapsed >= time_limit:
-                self.logger.info(
-                    f"[{tag}] Timeout global atteint après {iterations_done} itérations")
-                break
-            if max_iterations is not None and iteration >= max_iterations:
-                self.logger.info(
-                    f"[{tag}] Max iterations atteint: {max_iterations}")
+            # --- Trouver une solution initiale (budget = min(initial_time_limit, temps restant)) ---
+            remaining = deadline - time.time()
+            if remaining <= 0:
                 break
 
-            iterations_done += 1
+            init_tl = min(initial_time_limit, remaining)
+            current_solution, nodes = self._find_initial_solution(
+                time_limit=init_tl)
 
-            remaining_time = time_limit - elapsed
-            iter_time_limit = min(
-                self.time_limit_per_iteration, remaining_time)
-            if iter_time_limit <= 0:
-                break
-
-            rows_to_fix = self._select_rows_to_fix(
-                n=self.n, neighborhood_size=self.neighborhood_size)
-
-            new_solution, nodes = self._repair_solution(
-                current_solution=current_solution,
-                rows_to_fix=rows_to_fix,
-                time_limit=iter_time_limit,
-                iteration=iteration,
-            )
-            repair_nodes += nodes
+            initial_nodes += nodes
             total_nodes += nodes
 
-            if new_solution is not None:
-                repairs_success += 1
-                # Comptage des solutions distinctes
-                key = self.solution_key(new_solution)
-                if key not in unique_keys:
-                    unique_keys.add(key)
-                    all_solutions.append(new_solution)
+            if current_solution is None:
+                # si multistart, on réessaye tant que le temps n'est pas fini
+                if multistart:
+                    continue
 
-                # Stratégie humaine: apprendre ce qui bouge
-                if self.neighborhood_policy == "unstable_relax":
-                    for i in range(self.n):
-                        if new_solution[i] != current_solution[i]:
-                            self.change_count[i] += 1
-
-                # Diversification simple: on prend la dernière solution trouvée
-                current_solution = new_solution
-            else:
-                repairs_fail += 1
-
-            if (iteration + 1) % 10 == 0:
-                self.logger.debug(
-                    f"[{tag}] it={iteration+1}, uniques={len(unique_keys)}, nodes={total_nodes}"
+                # sinon, échec global immédiat (comportement précédent)
+                self.logger.warning(
+                    f"[{tag}] Échec de la recherche de solution initiale")
+                return SolverResult(
+                    solutions=[],
+                    unique_solutions=set(),
+                    execution_time=time.time() - start_time,
+                    time_to_first_solution=None,
+                    iterations=0,
+                    nodes_explored=total_nodes,
+                    success=False,
+                    metadata={
+                        "method_id": self.method_id,
+                        "algorithm_name": self.algorithm_name,
+                        "n": self.n,
+                        "symmetry_breaking": self.symmetry_breaking,
+                        "reason": "no_initial_solution",
+                        "neighborhood_size": self.neighborhood_size,
+                        "neighborhood_policy": self.neighborhood_policy,
+                        "time_limit_per_iteration": self.time_limit_per_iteration,
+                        "initial_time_limit": initial_time_limit,
+                        "max_iterations": max_iterations,
+                        "multistart": multistart,
+                        "seed": self.seed,
+                    },
                 )
 
-            iteration += 1
+            # enregistrer solution initiale
+            key0 = self.solution_key(current_solution)
+            if key0 not in unique_keys:
+                unique_keys.add(key0)
+                all_solutions.append(current_solution)
+
+            if time_to_first is None:
+                time_to_first = time.time() - start_time
+                self.logger.info(
+                    f"[{tag}] Première solution trouvée en {time_to_first:.4f}s")
+
+            # --- LNS iterations pour ce run ---
+            local_iteration = 0
+            no_progress = 0  # nb d'itérations sans nouvelle solution unique
+
+            while time.time() < deadline:
+                if max_iterations is not None and local_iteration >= max_iterations:
+                    break
+
+                remaining = deadline - time.time()
+                iter_time_limit = min(self.time_limit_per_iteration, remaining)
+                if iter_time_limit <= 0:
+                    break
+
+                iterations_done += 1
+                global_iteration += 1
+                local_iteration += 1
+
+                rows_to_fix = self._select_rows_to_fix(
+                    n=self.n, neighborhood_size=self.neighborhood_size
+                )
+
+                new_solution, nodes = self._repair_solution(
+                    current_solution=current_solution,
+                    rows_to_fix=rows_to_fix,
+                    time_limit=iter_time_limit,
+                    iteration=global_iteration,  # seed varie globalement
+                )
+
+                repair_nodes += nodes
+                total_nodes += nodes
+
+                if new_solution is not None:
+                    repairs_success += 1
+
+                    key = self.solution_key(new_solution)
+                    if key not in unique_keys:
+                        unique_keys.add(key)
+                        all_solutions.append(new_solution)
+                        no_progress = 0
+                    else:
+                        no_progress += 1
+
+                    # Stratégie humaine: apprendre ce qui bouge
+                    if self.neighborhood_policy == "unstable_relax":
+                        for i in range(self.n):
+                            if new_solution[i] != current_solution[i]:
+                                self.change_count[i] += 1
+
+                    current_solution = new_solution
+                else:
+                    repairs_fail += 1
+                    no_progress += 1
+
+                if (global_iteration % 10) == 0:
+                    self.logger.debug(
+                        f"[{tag}] it={global_iteration}, uniques={len(unique_keys)}, nodes={total_nodes}, restarts={restarts}"
+                    )
+
+                # Si multistart: on restart quand on stagne trop
+                if multistart and no_progress >= STAGNATION_THRESHOLD:
+                    break
+
+            # Si pas multistart: on ne fait qu'un run, puis sortie
+            if not multistart:
+                break
 
         execution_time = time.time() - start_time
         success = len(unique_keys) > 0
 
+        # si multistart=True et aucune init n'a jamais réussi
+        if not success:
+            self.logger.warning(
+                f"[{tag}] Aucune solution trouvée avant timeout")
+
         self.logger.info(
             f"[{tag}] Terminé: {len(unique_keys)} solutions uniques, "
-            f"{iterations_done} itérations, {execution_time:.4f}s"
+            f"{iterations_done} itérations, restarts={restarts}, temps={execution_time:.4f}s"
         )
 
         return SolverResult(
@@ -254,6 +294,7 @@ class CPSatLNSSolver(IncompleteSolver):
                 "time_limit_per_iteration": self.time_limit_per_iteration,
                 "initial_time_limit": initial_time_limit,
                 "max_iterations": max_iterations,
+                "multistart": multistart,
                 "seed": self.seed,
                 "solutions_collected": len(all_solutions),
                 "unique_solutions_collected": len(unique_keys),
@@ -262,6 +303,7 @@ class CPSatLNSSolver(IncompleteSolver):
                 "iterations": iterations_done,
                 "repairs_success": repairs_success,
                 "repairs_fail": repairs_fail,
+                "restarts": restarts,
             },
         )
 
@@ -308,8 +350,8 @@ class CPSatLNSSolver(IncompleteSolver):
          Choisit les lignes à FIXER pour l'étape de repair.
 
         Important:
-          - relax_fraction = fraction de lignes RELÂCHÉES (voisinage)
-          - la fonction renvoie la liste des lignes FIXÉES
+          - neighborhood_size = fraction de lignes RELÂCHÉES (voisinage)
+          - la fonction renvoie la liste des lignes FIXÉES.
         """
         num_to_relax = int(n * neighborhood_size)
         num_to_relax = max(1, num_to_relax)
@@ -395,6 +437,7 @@ if __name__ == "__main__":
     solver = CPSatLNSSolver(
         n=20,
         neighborhood_size=0.3,
+        neighborhood_policy="random",
         time_limit_per_iteration=1.0,
         symmetry_breaking=False,
         seed=42,
@@ -404,6 +447,7 @@ if __name__ == "__main__":
         time_limit=45.0,
         max_iterations=None,
         initial_time_limit=5.0,
+        multistart=False,
     )
 
     print(f"\n{result}")
@@ -415,7 +459,3 @@ if __name__ == "__main__":
     else:
         print("  - Aucune solution valide")
     print(f"  - Itérations LNS: {result.iterations}")
-
-    if result.solutions:
-        print(f"\nPremière solution: {result.solutions[0]}")
-        solver.print_board(result.solutions[0])
