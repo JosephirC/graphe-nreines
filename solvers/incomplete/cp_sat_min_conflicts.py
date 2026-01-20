@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from ortools.sat.python import cp_model
-from typing import Optional, List, Set, Tuple, Dict, Iterable
+import random
 import time
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from ..base_solver import IncompleteSolver, SolverResult
 
@@ -10,66 +10,51 @@ Solution = List[int]
 SolutionKey = Tuple[int, ...]
 
 
-_STATUS_MAP = {
-    cp_model.OPTIMAL: "OPTIMAL",
-    cp_model.FEASIBLE: "FEASIBLE",
-    cp_model.INFEASIBLE: "INFEASIBLE",
-    cp_model.MODEL_INVALID: "MODEL_INVALID",
-    cp_model.UNKNOWN: "UNKNOWN",
-}
-
-
-class CPSatMinConflictsSolver(IncompleteSolver):
+class MinConflictsSolver(IncompleteSolver):
     """
-    CP-SAT Min-Conflicts via contraintes molles (optimisation).
+    VRAI Min-Conflicts (recherche locale) pour N-Reines.
 
-    Idée:
-    - On autorise des violations (soft constraints) sur certains types de conflits.
-    - On minimise une somme pondérée de booléens de conflits.
-    - Une solution "valide N-reines" = 0 conflit (colonnes + diagonales).
+    Représentation:
+      - 1 reine par ligne (toujours)
+      - variable = ligne i
+      - valeur = colonne sol[i] dans [0..n-1]
 
-    Note importante:
-    - Si un type n'est PAS dans conflict_types, il est imposé en contrainte dure.
-      Exemple: conflict_types=("diagonals",) => colonnes en dur (AllDifferent).
+    Algorithme (Minton 1992 - version classique):
+      - Initialisation aléatoire
+      - Tant qu'il reste des conflits:
+          - choisir une ligne en conflit
+          - déplacer la reine sur une colonne minimisant les conflits
+          - (optionnel) bruit: avec prob noise, move aléatoire
+      - Multi-start: si pas de solution après max_steps, on redémarre
+      - Anytime: continue à chercher d'autres solutions jusqu'au timeout
     """
 
     def __init__(
         self,
         n: int,
-        conflict_types: Optional[Iterable[str]] = ("columns", "diagonals"),
-        conflict_weights: Optional[Dict[str, int]] = None,
         symmetry_breaking: bool = False,
         seed: Optional[int] = None,
+        noise: float = 0.10,
+        max_steps: int = 20000,
+        pick_policy: str = "random"  # "random" | "max_conflict"
     ):
         super().__init__(n, symmetry_breaking, seed)
 
-        if conflict_types is None:
-            conflict_types = ("columns", "diagonals")
+        if not (0.0 <= noise <= 1.0):
+            raise ValueError(f"noise doit être dans [0,1] (reçu {noise})")
+        if max_steps <= 0:
+            raise ValueError(f"max_steps doit être > 0 (reçu {max_steps})")
 
-        self.conflict_types = tuple(conflict_types)
+        self.noise = float(noise)
+        self.max_steps = int(max_steps)
 
-        allowed = {"columns", "diagonals"}
-        unknown = set(self.conflict_types) - allowed
-        if unknown:
+        self._rng = random.Random(seed)
+
+        allowed = {"random", "max_conflict"}
+        if pick_policy not in allowed:
             raise ValueError(
-                f"conflict_types inconnus: {sorted(unknown)} (attendus: {sorted(allowed)})")
-
-        # Poids par défaut + merge user
-        base_weights = {
-            "columns": 1,
-            "diag_desc": 1,  # ↘ : (row + col) égal
-            "diag_asc": 1,   # ↙ : (row - col) égal
-        }
-        if conflict_weights:
-            base_weights.update(conflict_weights)
-
-        # Validation simple
-        for k, v in base_weights.items():
-            if not isinstance(v, int) or v <= 0:
-                raise ValueError(
-                    f"conflict_weights[{k!r}] doit être un int > 0 (reçu: {v!r})")
-
-        self.conflict_weights = base_weights
+                f"pick_policy doit être dans {allowed} (reçu {pick_policy})")
+        self.pick_policy = pick_policy
 
     @property
     def method_id(self) -> str:
@@ -77,199 +62,285 @@ class CPSatMinConflictsSolver(IncompleteSolver):
 
     @property
     def algorithm_name(self) -> str:
-        return "CP-SAT + Min-Conflicts (soft constraints)"
+        return "Local Search - Min-Conflicts (multi-start)"
+
+    # ---------------------------
+    # Helpers: conflicts tracking
+    # ---------------------------
+    def _diag1(self, row: int, col: int) -> int:
+        # row - col in [-(n-1) .. (n-1)]
+        return row - col
+
+    def _diag2(self, row: int, col: int) -> int:
+        # row + col in [0 .. 2n-2]
+        return row + col
+
+    def _row_conflicts(
+        self,
+        row: int,
+        col: int,
+        col_count: List[int],
+        d1_count: Dict[int, int],
+        d2_count: List[int],
+    ) -> int:
+        # conflicts contributed by placing queen at (row,col), excluding itself handled by counts-1
+        c = col_count[col] - 1
+        c += d1_count[self._diag1(row, col)] - 1
+        c += d2_count[self._diag2(row, col)] - 1
+        return c
+
+    def _build_counts(self, sol: Solution):
+        col_count = [0] * self.n
+        d1_count: Dict[int, int] = {}
+        d2_count = [0] * (2 * self.n - 1)
+
+        for r, c in enumerate(sol):
+            col_count[c] += 1
+            k1 = self._diag1(r, c)
+            d1_count[k1] = d1_count.get(k1, 0) + 1
+            d2_count[self._diag2(r, c)] += 1
+
+        return col_count, d1_count, d2_count
+
+    def _is_conflicting_row(
+        self,
+        r: int,
+        sol: Solution,
+        col_count: List[int],
+        d1_count: Dict[int, int],
+        d2_count: List[int],
+    ) -> bool:
+        c = sol[r]
+        return (
+            col_count[c] > 1
+            or d1_count[self._diag1(r, c)] > 1
+            or d2_count[self._diag2(r, c)] > 1
+        )
+
+    def _random_initial_solution(self) -> Solution:
+        sol = [0] * self.n
+        if self.symmetry_breaking:
+            # simple symmetry breaking: row 0 in left half
+            max_c = (self.n - 1) // 2
+            sol[0] = self._rng.randint(0, max_c)
+            start = 1
+        else:
+            start = 0
+
+        for r in range(start, self.n):
+            sol[r] = self._rng.randrange(self.n)
+
+        return sol
+
+    def _best_columns_for_row(
+        self,
+        r: int,
+        sol: Solution,
+        col_count: List[int],
+        d1_count: Dict[int, int],
+        d2_count: List[int],
+    ) -> List[int]:
+        """
+        Returns all columns achieving minimal conflicts for row r,
+        given current counts (which include current placement of row r).
+        """
+        # Temporarily remove current queen from counts
+        old_c = sol[r]
+        col_count[old_c] -= 1
+        k1_old = self._diag1(r, old_c)
+        d1_count[k1_old] -= 1
+        if d1_count[k1_old] == 0:
+            del d1_count[k1_old]
+        d2_count[self._diag2(r, old_c)] -= 1
+
+        # Evaluate
+        best_cols: List[int] = []
+        best_score = None
+
+        # symmetry breaking constraint applies only to row 0
+        if self.symmetry_breaking and r == 0:
+            col_iter = range(0, (self.n - 1) // 2 + 1)
+        else:
+            col_iter = range(self.n)
+
+        for c in col_iter:
+            # compute conflicts if we place at (r,c) with counts excluding row r
+            score = col_count[c] + \
+                d1_count.get(self._diag1(r, c), 0) + \
+                d2_count[self._diag2(r, c)]
+            # score is number of other queens attacking this position
+            if best_score is None or score < best_score:
+                best_score = score
+                best_cols = [c]
+            elif score == best_score:
+                best_cols.append(c)
+
+        # Add queen back at old position to restore counts
+        col_count[old_c] += 1
+        d1_count[k1_old] = d1_count.get(k1_old, 0) + 1
+        d2_count[self._diag2(r, old_c)] += 1
+
+        return best_cols
+
+    def _apply_move(
+        self,
+        r: int,
+        new_c: int,
+        sol: Solution,
+        col_count: List[int],
+        d1_count: Dict[int, int],
+        d2_count: List[int],
+    ) -> None:
+        old_c = sol[r]
+        if new_c == old_c:
+            return
+
+        # remove old
+        col_count[old_c] -= 1
+        k1_old = self._diag1(r, old_c)
+        d1_count[k1_old] -= 1
+        if d1_count[k1_old] == 0:
+            del d1_count[k1_old]
+        d2_count[self._diag2(r, old_c)] -= 1
+
+        # set new
+        sol[r] = new_c
+        col_count[new_c] += 1
+        k1_new = self._diag1(r, new_c)
+        d1_count[k1_new] = d1_count.get(k1_new, 0) + 1
+        d2_count[self._diag2(r, new_c)] += 1
 
     def solve(self, time_limit: float = 45.0) -> SolverResult:
         tag = self.method_id
         self.logger.info(
             f"[{tag}] Démarrage Min-Conflicts pour N={self.n}, "
-            f"conflict_types={list(self.conflict_types)}, time_limit={time_limit}s"
+            f"noise={self.noise}, max_steps={self.max_steps}, "
+            f"symmetry_breaking={self.symmetry_breaking}, time_limit={time_limit}s"
         )
 
         start_time = time.time()
+        deadline = start_time + time_limit
 
-        # Tracking solutions valides distinctes
         unique_keys: Set[SolutionKey] = set()
-        all_solutions: List[Solution] = []
+        solutions: List[Solution] = []
 
-        # -----------------------
-        # Modèle
-        # -----------------------
-        model = cp_model.CpModel()
-        queens = [model.NewIntVar(
-            0, self.n - 1, f"q{i}") for i in range(self.n)]
+        time_to_first: Optional[float] = None
 
-        # Symmetry breaking (optionnel)
-        if self.symmetry_breaking:
-            model.Add(queens[0] <= (self.n - 1) // 2)
+        total_steps = 0
+        restarts = 0
 
-        conflict_terms: List[cp_model.LinearExpr] = []
+        # Anytime loop: keep restarting until timeout, collect distinct valid solutions
+        while time.time() < deadline:
+            restarts += 1
+            sol = self._random_initial_solution()
+            col_count, d1_count, d2_count = self._build_counts(sol)
 
-        # Colonnes: soit soft (bools), soit hard (AllDifferent)
-        if "columns" in self.conflict_types:
-            w_col = self.conflict_weights.get("columns", 1)
-            for i in range(self.n):
-                for j in range(i + 1, self.n):
-                    b = model.NewBoolVar(f"col_conf_{i}_{j}")
-                    model.Add(queens[i] == queens[j]).OnlyEnforceIf(b)
-                    model.Add(queens[i] != queens[j]).OnlyEnforceIf(b.Not())
-                    conflict_terms.append(w_col * b)
-        else:
-            model.AddAllDifferent(queens)
+            # One restart search
+            for _ in range(self.max_steps):
+                now = time.time()
+                if now >= deadline:
+                    break
 
-        # Diagonales: soit soft (bools), soit hard (AllDifferent sur expr)
-        if "diagonals" in self.conflict_types:
-            w_desc = self.conflict_weights.get("diag_desc", 1)
-            w_asc = self.conflict_weights.get("diag_asc", 1)
-            for i in range(self.n):
-                for j in range(i + 1, self.n):
-                    b_desc = model.NewBoolVar(f"diag_desc_conf_{i}_{j}")
-                    model.Add(queens[i] + i == queens[j] +
-                              j).OnlyEnforceIf(b_desc)
-                    model.Add(queens[i] + i != queens[j] +
-                              j).OnlyEnforceIf(b_desc.Not())
-                    conflict_terms.append(w_desc * b_desc)
+                total_steps += 1
 
-                    b_asc = model.NewBoolVar(f"diag_asc_conf_{i}_{j}")
-                    model.Add(queens[i] - i == queens[j] -
-                              j).OnlyEnforceIf(b_asc)
-                    model.Add(queens[i] - i != queens[j] -
-                              j).OnlyEnforceIf(b_asc.Not())
-                    conflict_terms.append(w_asc * b_asc)
-        else:
-            model.AddAllDifferent([queens[i] + i for i in range(self.n)])
-            model.AddAllDifferent([queens[i] - i for i in range(self.n)])
+                # find conflicting rows
+                conflicted_rows = [r for r in range(self.n) if self._is_conflicting_row(
+                    r, sol, col_count, d1_count, d2_count)]
 
-        # Objectif si on a des conflits "soft"
-        if conflict_terms:
-            model.Minimize(sum(conflict_terms))
+                if not conflicted_rows:
+                    # found a valid solution
+                    if self.verify_solution(sol):
+                        key = self.solution_key(sol)
+                        if key not in unique_keys:
+                            unique_keys.add(key)
+                            solutions.append(sol.copy())
+                            if time_to_first is None:
+                                time_to_first = now - start_time
+                                self.logger.info(
+                                    f"[{tag}] Première solution trouvée en {time_to_first:.4f}s"
+                                )
+                    # restart immediately to sample more solutions
+                    break
 
-        # -----------------------
-        # Solveur + callback
-        # -----------------------
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = time_limit
-        solver.parameters.num_search_workers = 1
-        if self.seed is not None:
-            solver.parameters.random_seed = self.seed
+                # choose a conflicting variable (row)
+                if self.pick_policy == "random":
+                    r = self._rng.choice(conflicted_rows)
+                else:
+                    # max-conflict
+                    best = []
+                    best_c = -1
+                    for rr in conflicted_rows:
+                        cc = self._row_conflicts(
+                            rr, sol[rr], col_count, d1_count, d2_count)
+                        if cc > best_c:
+                            best_c = cc
+                            best = [rr]
+                        elif cc == best_c:
+                            best.append(rr)
+                    r = self._rng.choice(best)
 
-        cb = _ValidSolutionCollector(
-            queens=queens,
-            solver_instance=self,
-            start_time=start_time,
-            unique_keys=unique_keys,
-            solutions=all_solutions,
-        )
+                # choose move
+                if self._rng.random() < self.noise:
+                    # random move (diversification)
+                    if self.symmetry_breaking and r == 0:
+                        new_c = self._rng.randint(0, (self.n - 1) // 2)
+                    else:
+                        new_c = self._rng.randrange(self.n)
+                else:
+                    best_cols = self._best_columns_for_row(
+                        r, sol, col_count, d1_count, d2_count)
+                    new_c = self._rng.choice(best_cols)
 
-        self.logger.info(f"[{tag}] Lancement de l'optimisation...")
-        status = solver.Solve(model, cb)
+                self._apply_move(r, new_c, sol, col_count, d1_count, d2_count)
 
         execution_time = time.time() - start_time
-        num_branches = solver.NumBranches()
-        num_conflicts_solver = solver.NumConflicts()
-        status_str = _STATUS_MAP.get(status, "UNKNOWN")
-
-        objective_value = None
-        # Si pas d'objectif, ObjectiveValue() vaut 0.0 mais ce n'est pas très informatif.
-        if conflict_terms and status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            objective_value = solver.ObjectiveValue()
-
         success = len(unique_keys) > 0
 
         self.logger.info(
             f"[{tag}] Terminé: {len(unique_keys)} solutions valides uniques, "
-            f"objectif_final={objective_value}, {execution_time:.4f}s"
+            f"{execution_time:.4f}s, restarts={restarts}, steps={total_steps}"
         )
 
         return SolverResult(
-            solutions=all_solutions,
+            solutions=solutions,
             unique_solutions=unique_keys,
             execution_time=execution_time,
-            time_to_first_solution=cb.time_to_first,
-            iterations=len(all_solutions),
-            nodes_explored=num_branches,
+            time_to_first_solution=time_to_first,
+            iterations=total_steps,          # steps de recherche locale
+            nodes_explored=total_steps,      # analogue (pas un arbre)
             success=success,
             metadata={
                 "method_id": self.method_id,
-                "status": status_str,
-                "num_branches": num_branches,
-                "num_conflicts_solver": num_conflicts_solver,
-                "objective_value": objective_value,
-                "conflict_types": list(self.conflict_types),
-                "conflict_weights": self.conflict_weights,
+                "algorithm_name": self.algorithm_name,
+                "n": self.n,
                 "symmetry_breaking": self.symmetry_breaking,
-                "solutions_collected": len(all_solutions),
+                "pick_policy": self.pick_policy,
+                "seed": self.seed,
+                "noise": self.noise,
+                "max_steps": self.max_steps,
+                "restarts": restarts,
+                "steps": total_steps,
                 "unique_solutions_collected": len(unique_keys),
+                "solutions_collected": len(solutions),
             },
         )
 
 
-class _ValidSolutionCollector(cp_model.CpSolverSolutionCallback):
-    """
-    Collecte uniquement les solutions N-reines VALIDE (0 conflit total).
-    """
-
-    def __init__(
-        self,
-        queens: List[cp_model.IntVar],
-        solver_instance: CPSatMinConflictsSolver,
-        start_time: float,
-        unique_keys: Set[SolutionKey],
-        solutions: List[Solution],
-    ):
-        super().__init__()
-        self._queens = queens
-        self._solver = solver_instance
-        self._start_time = start_time
-        self._unique_keys = unique_keys
-        self._solutions = solutions
-        self.time_to_first: Optional[float] = None
-
-    def OnSolutionCallback(self) -> None:
-        sol = [self.Value(v) for v in self._queens]
-
-        # On ne garde que les solutions valides N-reines
-        if not self._solver.verify_solution(sol):
-            return
-
-        key = self._solver.solution_key(sol)
-        if key in self._unique_keys:
-            return
-
-        self._unique_keys.add(key)
-        self._solutions.append(sol)
-
-        if self.time_to_first is None:
-            self.time_to_first = time.time() - self._start_time
-            tag = self._solver.method_id
-            self._solver.logger.info(
-                f"[{tag}] Première solution VALIDE trouvée en {self.time_to_first:.4f}s"
-            )
+CPSatMinConflictsSolver = MinConflictsSolver
 
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("Test Min-Conflicts - CP-SAT (soft constraints)")
+    print("Test Min-Conflicts (Local Search) - N-Queens")
     print("=" * 70)
 
-    # Exemple 1: diagonales en soft, colonnes en dur
     solver = CPSatMinConflictsSolver(
-        n=8,
-        conflict_types=("diagonals",),
-        conflict_weights={"diag_desc": 2, "diag_asc": 2},
-        symmetry_breaking=False,
-        seed=42,
-    )
-    result = solver.solve(time_limit=45.0)
+        n=14, symmetry_breaking=False, seed=42, noise=0.15, max_steps=30000)
+    result = solver.solve(time_limit=5.0)
     print(result)
-    print("\nMétriques benchmark:")
     print(
-        f"  - Solutions valides uniques en 45s: {result.num_unique_solutions()}")
+        f"\nSolutions valides uniques en 5s: {result.num_unique_solutions()}")
     if result.time_to_first_solution is not None:
-        print(
-            f"  - Temps première solution valide: {result.time_to_first_solution:.4f}s")
+        print(f"Temps première solution: {result.time_to_first_solution:.4f}s")
     else:
-        print("  - Aucune solution valide trouvée")
-
-    if result.solutions:
-        solver.print_board(result.solutions[0])
+        print("Aucune solution trouvée")
