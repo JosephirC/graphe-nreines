@@ -1,0 +1,84 @@
+N= 8 | COMPLETE_first_fail      | rep=00 | unique=    92 | time=0.017s | success=True
+N= 8 | COMPLETE_first_fail      | rep=01 | unique=    92 | time=0.016s | success=True
+N= 8 | COMPLETE_first_fail      | rep=02 | unique=    92 | time=0.016s | success=True
+N= 8 | COMPLETE_center_out      | rep=00 | unique=    92 | time=0.013s | success=True
+N= 8 | COMPLETE_center_out      | rep=01 | unique=    92 | time=0.010s | success=True
+N= 8 | COMPLETE_center_out      | rep=02 | unique=    92 | time=0.014s | success=True
+N= 8 | INCOMPLETE_lns           | rep=00 | unique=     1 | time=45.000s | success=True
+N= 8 | INCOMPLETE_lns           | rep=01 | unique=     1 | time=45.000s | success=True
+N= 8 | INCOMPLETE_lns           | rep=02 | unique=     1 | time=45.000s | success=True
+N= 8 | INCOMPLETE_min_conflicts | rep=00 | unique=    92 | time=45.000s | success=True
+N= 8 | INCOMPLETE_min_conflicts | rep=01 | unique=    92 | time=45.000s | success=True
+N= 8 | INCOMPLETE_min_conflicts | rep=02 | unique=    92 | time=45.000s | success=True
+N= 9 | COMPLETE_first_fail      | rep=00 | unique=   352 | time=0.037s | success=True
+N= 9 | COMPLETE_first_fail      | rep=01 | unique=   352 | time=0.039s | success=True
+N= 9 | COMPLETE_first_fail      | rep=02 | unique=   352 | time=0.039s | success=True
+N= 9 | COMPLETE_center_out      | rep=00 | unique=   352 | time=0.036s | success=True
+N= 9 | COMPLETE_center_out      | rep=01 | unique=   352 | time=0.036s | success=True
+N= 9 | COMPLETE_center_out      | rep=02 | unique=   352 | time=0.034s | success=True
+N= 9 | INCOMPLETE_lns           | rep=00 | unique=     1 | time=45.000s | success=True
+N= 9 | INCOMPLETE_lns           | rep=01 | unique=     1 | time=45.000s | success=True
+N= 9 | INCOMPLETE_lns           | rep=02 | unique=     1 | time=45.000s | success=True
+N= 9 | INCOMPLETE_min_conflicts | rep=00 | unique=   352 | time=45.000s | success=True
+N= 9 | INCOMPLETE_min_conflicts | rep=01 | unique=   352 | time=45.000s | success=True
+N= 9 | INCOMPLETE_min_conflicts | rep=02 | unique=   352 | time=45.000s | success=True
+N=10 | COMPLETE_first_fail      | rep=00 | unique=   724 | time=0.088s | success=True
+N=10 | COMPLETE_first_fail      | rep=01 | unique=   724 | time=0.087s | success=True
+N=10 | COMPLETE_first_fail      | rep=02 | unique=   724 | time=0.089s | success=True
+N=10 | COMPLETE_center_out      | rep=00 | unique=   724 | time=0.077s | success=True
+N=10 | COMPLETE_center_out      | rep=01 | unique=   724 | time=0.078s | success=True
+N=10 | COMPLETE_center_out      | rep=02 | unique=   724 | time=0.080s | success=True
+N=10 | INCOMPLETE_lns           | rep=00 | unique=     1 | time=45.000s | success=True
+N=10 | INCOMPLETE_lns           | rep=01 | unique=     1 | time=45.000s | success=True
+N=10 | INCOMPLETE_lns           | rep=02 | unique=     1 | time=45.000s | success=True
+N=10 | INCOMPLETE_min_conflicts | rep=00 | unique=   724 | time=45.000s | success=True
+N=10 | INCOMPLETE_min_conflicts | rep=01 | unique=   724 | time=45.000s | success=True
+N=10 | INCOMPLETE_min_conflicts | rep=02 | unique=   724 | time=45.000s | success=True
+N=11 | COMPLETE_first_fail      | rep=00 | unique=  2680 | time=0.641s | success=True
+N=11 | COMPLETE_first_fail      | rep=01 | unique=  2680 | time=0.650s | success=True
+N=11 | COMPLETE_first_fail      | rep=02 | unique=  2680 | time=0.684s | success=True
+N=11 | COMPLETE_center_out      | rep=00 | unique=  2680 | time=0.577s | success=True
+N=11 | COMPLETE_center_out      | rep=01 | unique=  2680 | time=0.579s | success=True
+N=11 | COMPLETE_center_out      | rep=02 | unique=  2680 | time=0.620s | success=True
+N=11 | INCOMPLETE_lns           | rep=00 | unique=     1 | time=45.000s | success=True
+N=11 | INCOMPLETE_lns           | rep=01 | unique=     1 | time=45.000s | success=True
+N=11 | INCOMPLETE_lns           | rep=02 | unique=     1 | time=45.001s | success=True
+N=11 | INCOMPLETE_min_conflicts | rep=00 | unique=  2647 | time=45.000s | success=True
+N=11 | INCOMPLETE_min_conflicts | rep=01 | unique=  2656 | time=45.000s | success=True
+N=11 | INCOMPLETE_min_conflicts | rep=02 | unique=  2651 | time=45.000s | success=True
+N=12 | COMPLETE_first_fail      | rep=00 | unique= 14200 | time=3.187s | success=True
+N=12 | COMPLETE_first_fail      | rep=01 | unique= 14200 | time=2.984s | success=True
+N=12 | COMPLETE_first_fail      | rep=02 | unique= 14200 | time=3.167s | success=True
+N=12 | COMPLETE_center_out      | rep=00 | unique= 14200 | time=2.732s | success=True
+N=12 | COMPLETE_center_out      | rep=01 | unique= 14200 | time=2.754s | success=True
+N=12 | COMPLETE_center_out      | rep=02 | unique= 14200 | time=2.781s | success=True
+N=12 | INCOMPLETE_lns           | rep=00 | unique=     1 | time=45.001s | success=True
+N=12 | INCOMPLETE_lns           | rep=01 | unique=     1 | time=45.000s | success=True
+N=12 | INCOMPLETE_lns           | rep=02 | unique=     1 | time=45.000s | success=True
+N=12 | INCOMPLETE_min_conflicts | rep=00 | unique=  9727 | time=45.000s | success=True
+N=12 | INCOMPLETE_min_conflicts | rep=01 | unique=  9618 | time=45.000s | success=True
+N=12 | INCOMPLETE_min_conflicts | rep=02 | unique=  9668 | time=45.000s | success=True
+N=13 | COMPLETE_first_fail      | rep=00 | unique= 73712 | time=26.551s | success=True
+N=13 | COMPLETE_first_fail      | rep=01 | unique= 73712 | time=21.910s | success=True
+N=13 | COMPLETE_first_fail      | rep=02 | unique= 73712 | time=22.436s | success=True
+N=13 | COMPLETE_center_out      | rep=00 | unique= 73712 | time=19.993s | success=True
+N=13 | COMPLETE_center_out      | rep=01 | unique= 73712 | time=20.957s | success=True
+N=13 | COMPLETE_center_out      | rep=02 | unique= 73712 | time=20.736s | success=True
+N=13 | INCOMPLETE_lns           | rep=00 | unique=     1 | time=45.000s | success=True
+N=13 | INCOMPLETE_lns           | rep=01 | unique=     1 | time=45.000s | success=True
+N=13 | INCOMPLETE_lns           | rep=02 | unique=     1 | time=45.000s | success=True
+N=13 | INCOMPLETE_min_conflicts | rep=00 | unique= 17020 | time=45.000s | success=True
+N=13 | INCOMPLETE_min_conflicts | rep=01 | unique= 17299 | time=45.000s | success=True
+N=13 | INCOMPLETE_min_conflicts | rep=02 | unique= 17566 | time=45.000s | success=True
+N=14 | COMPLETE_first_fail      | rep=00 | unique=126739 | time=45.008s | success=True
+N=14 | COMPLETE_first_fail      | rep=01 | unique=119449 | time=45.477s | success=True
+N=14 | COMPLETE_first_fail      | rep=02 | unique=115823 | time=44.974s | success=True
+N=14 | COMPLETE_center_out      | rep=00 | unique=149610 | time=45.007s | success=True
+N=14 | COMPLETE_center_out      | rep=01 | unique=153378 | time=45.008s | success=True
+N=14 | COMPLETE_center_out      | rep=02 | unique=154323 | time=45.005s | success=True
+N=14 | INCOMPLETE_lns           | rep=00 | unique=     1 | time=45.001s | success=True
+N=14 | INCOMPLETE_lns           | rep=01 | unique=     1 | time=45.000s | success=True
+N=14 | INCOMPLETE_lns           | rep=02 | unique=     1 | time=45.000s | success=True
+N=14 | INCOMPLETE_min_conflicts | rep=00 | unique= 20081 | time=45.000s | success=True
+N=14 | INCOMPLETE_min_conflicts | rep=01 | unique= 20235 | time=45.000s | success=True
+N=14 | INCOMPLETE_min_conflicts | rep=02 | unique= 18311 | time=45.000s | success=True

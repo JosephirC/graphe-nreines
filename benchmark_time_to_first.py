@@ -203,6 +203,8 @@ def main():
     parser.add_argument("--n-min", type=int, default=8, help="N minimal")
     parser.add_argument("--n-max", type=int, default=20,
                         help="N maximal (inclus)")
+    parser.add_argument("--n-step", type=int, default=1,
+                        help="Pas d'incrément sur N (ex: 20 => 20,40,60...)")
     parser.add_argument("--time-limit", type=float,
                         default=30.0, help="Timeout (secondes) par run")
     parser.add_argument("--symmetry-breaking",
@@ -220,7 +222,11 @@ def main():
     args = parser.parse_args()
 
     seeds = [int(s.strip()) for s in args.seeds.split(",") if s.strip() != ""]
-    ns = list(range(args.n_min, args.n_max + 1))
+
+    if args.n_step <= 0:
+        raise ValueError("--n-step doit être > 0")
+
+    ns = list(range(args.n_min, args.n_max + 1, args.n_step))
 
     df = run_benchmark_time_to_first(
         ns=ns,
