@@ -37,8 +37,7 @@ def _format_result(case: SolverCase, result: Any) -> str:
         # For complete solvers, 'nsol' is meaningful (enumeration)
         return f"{nsol} solutions uniques, {t:.4f}s"
     else:
-        # For incomplete solvers, we mainly care about "found something" + time
-        # nsol will usually be 1 (or small), that's fine.
+        # For incomplete solvers, we mainly care about "found something" + time, nsol will usually be 1 (or small), that's fine.
         return f"{nsol} solution(s) unique(s), {t:.4f}s"
 
 
@@ -73,7 +72,7 @@ def main() -> None:
             kind="incomplete",
             factory=lambda: CPSatLNSSolver(
                 n=n, neighborhood_size=0.3, seed=seed),
-            time_limit=2.0,  # inutile de cramer 5s pour un test d'archi
+            time_limit=2.0,
         ),
         SolverCase(
             name="CP-SAT Incomplete - Min-Conflicts",
