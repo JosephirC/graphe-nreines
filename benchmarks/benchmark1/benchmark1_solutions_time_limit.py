@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-import time
 import argparse
+import json
+import time
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Any, Optional
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -22,6 +25,24 @@ class MethodSpec:
     build: Callable[[int, bool, int], Any]
 
 
+def _safe(s: str) -> str:
+    # pour noms de dossiers/fichiers
+    return "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in s)
+
+
+def _make_run_id(args: argparse.Namespace) -> str:
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    core = (
+        f"n{args.n_min}-{args.n_max}"
+        f"_t{int(args.time_limit)}"
+        f"_rep{args.repeats}"
+        f"_sym{int(args.symmetry_breaking)}"
+        f"_lns{args.lns_policy}_ms{int(args.lns_multistart)}"
+        f"_mc{args.mc_pick_policy}"
+    )
+    return f"{ts}_{_safe(core)}"
+
+
 def run_benchmark_solutions(
     ns: List[int],
     time_limit: float,
@@ -38,17 +59,17 @@ def run_benchmark_solutions(
     mc_noise: float,
     mc_max_steps: int,
     mc_pick_policy: str,
+    log_path: Path,
 ) -> pd.DataFrame:
     """
     Benchmark #1:
     Pour chaque N et chaque méthode, compter le nombre de solutions valides distinctes trouvées
     dans la limite de temps.
 
-    Important:
-    - COMPLETE = énumération (SearchForAllSolutions) => "nb solutions énumérées"
-    - INCOMPLETE = sampling anytime => "nb solutions distinctes rencontrées"
+    NOTE:
+      - COMPLETE = énumération / search all solutions => "solutions énumérées"
+      - INCOMPLETE = anytime sampling => "solutions distinctes rencontrées"
     """
-
     methods: List[MethodSpec] = [
         MethodSpec(
             name="COMPLETE_first_fail",
@@ -90,10 +111,15 @@ def run_benchmark_solutions(
 
     rows: List[Dict[str, Any]] = []
 
+    def log(line: str) -> None:
+        print(line)
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
     for n in ns:
         for m in methods:
             for rep in range(repeats):
-                run_seed = seed + rep  # simple & reproductible
+                run_seed = seed + rep  # reproductible
 
                 solver = m.build(n, symmetry_breaking, run_seed)
 
@@ -113,7 +139,7 @@ def run_benchmark_solutions(
                 wall = time.time() - t0
                 exec_time = result.execution_time if result.execution_time else wall
 
-                rows.append({
+                row = {
                     "N": n,
                     "Method": m.name,
                     "Group": m.group,
@@ -125,33 +151,30 @@ def run_benchmark_solutions(
                     "ExecutionTime(s)": exec_time,
                     "Success": bool(result.success),
 
-                    # utiles pour debug/analyses
+                    # utiles pour debug / analyses
                     "TimeToFirst(s)": result.time_to_first_solution,
                     "Iterations": result.iterations,
                     "NodesOrSteps": result.nodes_explored,
 
-                    # garder un peu de metadata clé si dispo
+                    # metadata clé
                     "Meta_restarts": result.metadata.get("restarts"),
                     "Meta_policy": result.metadata.get("neighborhood_policy") or result.metadata.get("pick_policy"),
                     "Meta_noise": result.metadata.get("noise"),
                     "Meta_neighborhood_size": result.metadata.get("neighborhood_size"),
                     "Meta_multistart": result.metadata.get("multistart"),
-                })
+                }
+                rows.append(row)
 
-                print(
+                log(
                     f"N={n:2d} | {m.name:24s} | rep={rep:02d} | "
-                    f"unique={rows[-1]['UniqueSolutionsInTime']:6d} | "
-                    f"time={rows[-1]['ExecutionTime(s)']:.3f}s | "
-                    f"success={rows[-1]['Success']}"
+                    f"unique={row['UniqueSolutionsInTime']:6d} | "
+                    f"time={row['ExecutionTime(s)']:.3f}s | success={row['Success']}"
                 )
 
     return pd.DataFrame(rows)
 
 
 def summarize(df_raw: pd.DataFrame) -> pd.DataFrame:
-    """
-    Résumé par (N, Method): moyenne + std sur les repeats.
-    """
     g = df_raw.groupby(["N", "Method", "Group"], as_index=False)[
         "UniqueSolutionsInTime"].agg(["mean", "std", "min", "max"])
     g.columns = ["N", "Method", "Group", "MeanUnique",
@@ -159,10 +182,7 @@ def summarize(df_raw: pd.DataFrame) -> pd.DataFrame:
     return g
 
 
-def plot_solutions(df_summary: pd.DataFrame, out_png: str, title: str) -> None:
-    """
-    Plot mean +/- std. Courbe lisible même si les incomplete varient.
-    """
+def plot_solutions(df_summary: pd.DataFrame, out_png: Path, title: str) -> None:
     plt.figure(figsize=(11, 6))
 
     methods = sorted(df_summary["Method"].unique())
@@ -171,7 +191,6 @@ def plot_solutions(df_summary: pd.DataFrame, out_png: str, title: str) -> None:
         x = sub["N"]
         y = sub["MeanUnique"]
         yerr = sub["StdUnique"].fillna(0.0)
-
         plt.errorbar(x, y, yerr=yerr, marker="o", capsize=3, label=method)
 
     plt.xlabel("Taille du problème (N)")
@@ -191,37 +210,48 @@ def main():
     )
     parser.add_argument("--n-min", type=int, default=8)
     parser.add_argument("--n-max", type=int, default=14)
-    parser.add_argument("--time-limit", type=float, default=30.0)
+    parser.add_argument("--time-limit", type=float, default=45.0)
     parser.add_argument("--symmetry-breaking", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--repeats", type=int, default=3,
-                        help="Nb de runs par (N, méthode) pour moyenne/std")
+    parser.add_argument("--repeats", type=int, default=3)
 
     # LNS params
     parser.add_argument("--lns-neighborhood-size", type=float, default=0.30)
     parser.add_argument("--lns-policy", type=str, default="random",
                         choices=["random", "center_fix", "edge_fix", "unstable_relax"])
-    parser.add_argument("--lns-time-per-iter", type=float,
-                        default=0.15, help="Petit => plus d'itérations")
+    parser.add_argument("--lns-time-per-iter", type=float, default=0.10)
     parser.add_argument("--lns-initial-time", type=float, default=1.0)
-    parser.add_argument("--lns-multistart", action="store_true",
-                        help="Active LNS itératif (restarts sur stagnation)")
+    parser.add_argument("--lns-multistart", action="store_true")
 
     # Min-conflicts params
     parser.add_argument("--mc-noise", type=float, default=0.15)
-    parser.add_argument("--mc-max-steps", type=int, default=30000)
+    parser.add_argument("--mc-max-steps", type=int, default=3000)
     parser.add_argument("--mc-pick-policy", type=str, default="max_conflict",
                         choices=["random", "max_conflict"])
 
-    parser.add_argument("--out-csv-raw", type=str,
-                        default="benchmark_solutions_time_limit_raw.csv")
-    parser.add_argument("--out-csv-summary", type=str,
-                        default="benchmark_solutions_time_limit_summary.csv")
-    parser.add_argument("--out-png", type=str,
-                        default="benchmark_solutions_time_limit.png")
+    # output root
+    parser.add_argument("--out-root", type=str, default="benchmarks/benchmark1/runs",
+                        help="Dossier racine où créer le run (un sous-dossier par exécution).")
     args = parser.parse_args()
 
     ns = list(range(args.n_min, args.n_max + 1))
+
+    run_id = _make_run_id(args)
+    run_dir = Path(args.out_root) / run_id
+    run_dir.mkdir(parents=True, exist_ok=False)
+
+    # fichiers de sortie fixes par run
+    raw_csv = run_dir / "raw.csv"
+    summary_csv = run_dir / "summary.csv"
+    plot_png = run_dir / "plot.png"
+    config_json = run_dir / "config.json"
+    log_txt = run_dir / "log.txt"
+
+    # dump config
+    with config_json.open("w", encoding="utf-8") as f:
+        json.dump(vars(args), f, indent=2)
+
+    print(f"RUN_DIR: {run_dir}")
 
     df_raw = run_benchmark_solutions(
         ns=ns,
@@ -239,21 +269,25 @@ def main():
         mc_noise=args.mc_noise,
         mc_max_steps=args.mc_max_steps,
         mc_pick_policy=args.mc_pick_policy,
+
+        log_path=log_txt,
     )
 
-    df_raw.to_csv(args.out_csv_raw, index=False)
-    print(f"\nCSV raw écrit: {args.out_csv_raw}")
+    df_raw.to_csv(raw_csv, index=False)
+    print(f"CSV raw: {raw_csv}")
 
     df_summary = summarize(df_raw)
-    df_summary.to_csv(args.out_csv_summary, index=False)
-    print(f"CSV summary écrit: {args.out_csv_summary}")
+    df_summary.to_csv(summary_csv, index=False)
+    print(f"CSV summary: {summary_csv}")
 
     title = (
-        f"N-reines — Solutions trouvées en {args.time_limit:.0f}s "
-        f"(symmetry_breaking={args.symmetry_breaking}, repeats={args.repeats}, LNS_multistart={args.lns_multistart})"
+        f"N-reines — solutions en {int(args.time_limit)}s | "
+        f"sym={args.symmetry_breaking} | rep={args.repeats} | "
+        f"LNS={args.lns_policy}, ms={args.lns_multistart} | "
+        f"MC={args.mc_pick_policy}"
     )
-    plot_solutions(df_summary, args.out_png, title)
-    print(f"PNG écrit: {args.out_png}")
+    plot_solutions(df_summary, plot_png, title)
+    print(f"PNG: {plot_png}")
 
 
 if __name__ == "__main__":

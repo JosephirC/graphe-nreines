@@ -438,7 +438,7 @@ if __name__ == "__main__":
         n=20,
         neighborhood_size=0.3,
         neighborhood_policy="random",
-        time_limit_per_iteration=1.0,
+        time_limit_per_iteration=0.1,
         symmetry_breaking=False,
         seed=42,
     )
@@ -446,7 +446,7 @@ if __name__ == "__main__":
     result = solver.solve(
         time_limit=45.0,
         max_iterations=None,
-        initial_time_limit=5.0,
+        initial_time_limit=1.0,
         multistart=False,
     )
 
