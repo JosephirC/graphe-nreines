@@ -1,4 +1,4 @@
-from .i1_lns import I1LNSSolver
-from .i2_min_conflicts import I2MinConflictsSolver
+from .cp_sat_lns import CPSatLNSSolver
+from .cp_sat_min_conflicts import CPSatMinConflictsSolver
 
-__all__ = ['I1LNSSolver', 'I2MinConflictsSolver']
+__all__ = ['CPSatLNSSolver', 'CPSatMinConflictsSolver']

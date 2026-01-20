@@ -97,7 +97,7 @@ class CPSatFirstFailSolver(CompleteSolver):
         # Limite de temps
         solver.parameters.max_time_in_seconds = time_limit
 
-        # num_workers = 1 pour reproductibilité (TODO)
+        # num_workers = 1 pour reproductibilité
         solver.parameters.num_search_workers = 1
 
         # Seed pour reproductibilité
