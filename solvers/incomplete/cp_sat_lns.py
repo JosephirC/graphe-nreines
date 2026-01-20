@@ -38,6 +38,7 @@ class CPSatLNSSolver(IncompleteSolver):
         self,
         n: int,
         neighborhood_size: float = 0.3,
+        neighborhood_policy: str = "random", # "random" | "center_fix" | "edge_fix" | "unstable_relax"
         time_limit_per_iteration: float = 1.0,
         symmetry_breaking: bool = False,
         seed: Optional[int] = None
@@ -63,9 +64,15 @@ class CPSatLNSSolver(IncompleteSolver):
             raise ValueError(
                 f"time_limit_per_iteration doit être > 0, reçu: {time_limit_per_iteration}"
             )
+            
+        allowed = {"random", "center_fix", "edge_fix", "unstable_relax"}
+        if neighborhood_policy not in allowed:
+            raise ValueError(f"neighborhood_policy doit être dans {allowed} (reçu {neighborhood_policy})")
 
         self.neighborhood_size = neighborhood_size
         self.time_limit_per_iteration = time_limit_per_iteration
+        self.neighborhood_policy = neighborhood_policy
+        self.change_count = [0] * n
 
         self.rng = random.Random(seed)
 
@@ -102,6 +109,9 @@ class CPSatLNSSolver(IncompleteSolver):
         )
 
         start_time = time.time()
+        if self.neighborhood_policy == "unstable_relax":
+            self.change_count = [0] * self.n
+
 
         # Tracking des solutions uniques
         unique_keys: Set[SolutionKey] = set()
@@ -135,6 +145,7 @@ class CPSatLNSSolver(IncompleteSolver):
                     "method_id": self.method_id,
                     "reason": "no_initial_solution",
                     "neighborhood_size": self.neighborhood_size,
+                    "neighborhood_policy": self.neighborhood_policy,
                     "time_limit_per_iteration": self.time_limit_per_iteration,
                     "initial_time_limit": initial_time_limit,
                     "seed": self.seed
@@ -188,6 +199,12 @@ class CPSatLNSSolver(IncompleteSolver):
                 if key not in unique_keys:
                     unique_keys.add(key)
                     all_solutions.append(new_solution)
+                
+                # Stratégie humaine: apprendre ce qui bouge
+                if self.neighborhood_policy == "unstable_relax":
+                    for i in range(self.n):
+                        if new_solution[i] != current_solution[i]:
+                            self.change_count[i] += 1
 
                 # Diversification simple: on prend la dernière solution trouvée
                 current_solution = new_solution
@@ -268,13 +285,36 @@ class CPSatLNSSolver(IncompleteSolver):
         return None, nodes
 
     def _select_rows_to_fix(self, n: int, neighborhood_size: float) -> List[int]:
-        # nb de lignes relâchées
         num_to_relax = int(n * neighborhood_size)
         num_to_relax = max(1, num_to_relax)
         num_to_relax = min(n - 1, num_to_relax)
 
         num_to_fix = n - num_to_relax
-        return self.rng.sample(range(n), num_to_fix)
+
+        if self.neighborhood_policy == "random":
+            return self.rng.sample(range(n), num_to_fix)
+
+        center = (n - 1) / 2.0
+        idx = list(range(n))
+
+        if self.neighborhood_policy == "center_fix":
+            # fixer d'abord les variables centrales
+            idx.sort(key=lambda i: abs(i - center))
+            return idx[:num_to_fix]
+
+        if self.neighborhood_policy == "edge_fix":
+            # fixer d'abord les variables de bord
+            idx.sort(key=lambda i: -abs(i - center))
+            return idx[:num_to_fix]
+
+        if self.neighborhood_policy == "unstable_relax":
+            # relâcher les plus instables => fixer le reste
+            order = sorted(range(n), key=lambda i: self.change_count[i], reverse=True)
+            to_relax = set(order[:num_to_relax])
+            return [i for i in range(n) if i not in to_relax]
+
+        raise ValueError(f"Unknown neighborhood_policy={self.neighborhood_policy}")
+
 
     def _repair_solution(
         self,
