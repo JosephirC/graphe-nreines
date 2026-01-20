@@ -1,0 +1,24 @@
+N=25 | COMPLETE_first_fail      | rep=00 | unique=  5743 | time=45.062s | success=True
+N=25 | COMPLETE_center_out      | rep=00 | unique=238423 | time=45.004s | success=True
+N=25 | INCOMPLETE_lns           | rep=00 | unique=  4651 | time=45.000s | success=True
+N=25 | INCOMPLETE_min_conflicts | rep=00 | unique= 29371 | time=45.000s | success=True
+N=26 | COMPLETE_first_fail      | rep=00 | unique=  3934 | time=45.004s | success=True
+N=26 | COMPLETE_center_out      | rep=00 | unique=220422 | time=45.003s | success=True
+N=26 | INCOMPLETE_lns           | rep=00 | unique=  4251 | time=45.000s | success=True
+N=26 | INCOMPLETE_min_conflicts | rep=00 | unique= 29824 | time=45.000s | success=True
+N=27 | COMPLETE_first_fail      | rep=00 | unique=  2730 | time=45.097s | success=True
+N=27 | COMPLETE_center_out      | rep=00 | unique=201141 | time=45.042s | success=True
+N=27 | INCOMPLETE_lns           | rep=00 | unique=  6129 | time=45.000s | success=True
+N=27 | INCOMPLETE_min_conflicts | rep=00 | unique= 28055 | time=45.000s | success=True
+N=28 | COMPLETE_first_fail      | rep=00 | unique=  1348 | time=45.005s | success=True
+N=28 | COMPLETE_center_out      | rep=00 | unique=227915 | time=45.004s | success=True
+N=28 | INCOMPLETE_lns           | rep=00 | unique=  5979 | time=45.001s | success=True
+N=28 | INCOMPLETE_min_conflicts | rep=00 | unique= 28991 | time=45.000s | success=True
+N=29 | COMPLETE_first_fail      | rep=00 | unique=  3061 | time=45.004s | success=True
+N=29 | COMPLETE_center_out      | rep=00 | unique=212011 | time=45.004s | success=True
+N=29 | INCOMPLETE_lns           | rep=00 | unique=  5567 | time=45.001s | success=True
+N=29 | INCOMPLETE_min_conflicts | rep=00 | unique= 27346 | time=45.000s | success=True
+N=30 | COMPLETE_first_fail      | rep=00 | unique=  1670 | time=45.003s | success=True
+N=30 | COMPLETE_center_out      | rep=00 | unique=214111 | time=45.004s | success=True
+N=30 | INCOMPLETE_lns           | rep=00 | unique=  7449 | time=45.001s | success=True
+N=30 | INCOMPLETE_min_conflicts | rep=00 | unique= 26901 | time=45.000s | success=True

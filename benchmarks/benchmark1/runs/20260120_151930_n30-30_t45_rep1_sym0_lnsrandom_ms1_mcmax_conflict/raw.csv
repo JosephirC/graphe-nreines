@@ -1,0 +1,5 @@
+N,Method,Group,Repeat,Seed,TimeLimit(s),SymmetryBreaking,UniqueSolutionsInTime,ExecutionTime(s),Success,TimeToFirst(s),Iterations,NodesOrSteps,Meta_restarts,Meta_policy,Meta_noise,Meta_neighborhood_size,Meta_multistart
+30,COMPLETE_first_fail,COMPLETE,0,42,45.0,False,1450,45.01232314109802,True,0.11752557754516602,0,852625,,,,,
+30,COMPLETE_center_out,COMPLETE,0,42,45.0,False,201025,45.00445795059204,True,0.09652256965637207,0,4471462,,,,,
+30,INCOMPLETE_lns,INCOMPLETE,0,42,45.0,False,7124,45.000635623931885,True,0.04503321647644043,22560,95032,1.0,random,,0.3,True
+30,INCOMPLETE_min_conflicts,INCOMPLETE,0,42,45.0,False,25874,45.00005078315735,True,0.0009987354278564453,2598730,2598730,25969.0,max_conflict,0.15,,

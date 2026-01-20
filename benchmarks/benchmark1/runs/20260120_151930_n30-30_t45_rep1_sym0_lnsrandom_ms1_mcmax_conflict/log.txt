@@ -1,0 +1,4 @@
+N=30 | COMPLETE_first_fail      | rep=00 | unique=  1450 | time=45.012s | success=True
+N=30 | COMPLETE_center_out      | rep=00 | unique=201025 | time=45.004s | success=True
+N=30 | INCOMPLETE_lns           | rep=00 | unique=  7124 | time=45.001s | success=True
+N=30 | INCOMPLETE_min_conflicts | rep=00 | unique= 25874 | time=45.000s | success=True
