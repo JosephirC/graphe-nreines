@@ -434,10 +434,17 @@ if __name__ == "__main__":
     print("Test LNS - CP-SAT + LNS")
     print("=" * 70)
 
+    n = 30
+    neighborhood_size = 0.3
+    neighborhood_policy = "center_fix"
+    time_limit_per_iteration = 0.1
+    multistart = True
+    seed = 42
+
     solver = CPSatLNSSolver(
-        n=20,
+        n=30,
         neighborhood_size=0.3,
-        neighborhood_policy="random",
+        neighborhood_policy="center_fix",
         time_limit_per_iteration=0.1,
         symmetry_breaking=False,
         seed=42,
@@ -447,8 +454,12 @@ if __name__ == "__main__":
         time_limit=45.0,
         max_iterations=None,
         initial_time_limit=1.0,
-        multistart=False,
+        multistart=True,
     )
+
+    print(f"Parameters: n={n}, neighborhood_size={neighborhood_size}, "
+          f"policy={neighborhood_policy}, time_limit_per_iteration={time_limit_per_iteration}, "
+          f"multistart={multistart}, seed={seed}")
 
     print(f"\n{result}")
     print("\nMétriques benchmark:")
