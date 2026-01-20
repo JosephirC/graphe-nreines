@@ -49,12 +49,12 @@ class MinConflictsSolver(IncompleteSolver):
         self.max_steps = int(max_steps)
 
         self._rng = random.Random(seed)
-        
+
         allowed = {"random", "max_conflict"}
         if pick_policy not in allowed:
-            raise ValueError(f"pick_policy doit être dans {allowed} (reçu {pick_policy})")
+            raise ValueError(
+                f"pick_policy doit être dans {allowed} (reçu {pick_policy})")
         self.pick_policy = pick_policy
-
 
     @property
     def method_id(self) -> str:
@@ -270,14 +270,14 @@ class MinConflictsSolver(IncompleteSolver):
                     best = []
                     best_c = -1
                     for rr in conflicted_rows:
-                        cc = self._row_conflicts(rr, sol[rr], col_count, d1_count, d2_count)
+                        cc = self._row_conflicts(
+                            rr, sol[rr], col_count, d1_count, d2_count)
                         if cc > best_c:
                             best_c = cc
                             best = [rr]
                         elif cc == best_c:
                             best.append(rr)
                     r = self._rng.choice(best)
-
 
                 # choose move
                 if self._rng.random() < self.noise:
