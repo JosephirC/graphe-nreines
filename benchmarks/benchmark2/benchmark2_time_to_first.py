@@ -11,7 +11,6 @@ from typing import Any, Callable, Dict, List, Optional
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Solveurs
 from solvers.complete.cp_sat_fixed_search_first_fail import CPSatFirstFailSolver
 from solvers.complete.cp_sat_fixed_search_center_out import CPSatCenterOutSolver
 from solvers.incomplete.cp_sat_lns import CPSatLNSSolver
@@ -27,7 +26,7 @@ class MethodSpec:
 
 def _time_to_first_solution(result: Any, fallback_wall: float) -> Optional[float]:
     """
-    Lit time_to_first_solution si dispo.
+    Lit time_to_first_solution si disponible.
     Fallback: si success=True, approx = execution_time ou wall.
     Retourne None si pas de solution.
     """
@@ -52,12 +51,14 @@ def run_benchmark_time_to_first(
     symmetry_breaking: bool,
     seed: int,
     repeats: int,
+
     # LNS params
     lns_neighborhood_size: float,
     lns_policy: str,
     lns_time_per_iter: float,
     lns_initial_time: float,
     lns_multistart: bool,
+
     # Min-conflicts params
     mc_noise: float,
     mc_max_steps: int,
@@ -118,7 +119,7 @@ def run_benchmark_time_to_first(
 
                 t0 = time.time()
 
-                # LNS : garder la config comparable à benchmark1
+                # LNS
                 if m.name == "INCOMPLETE_lns":
                     result = solver.solve(
                         time_limit=time_limit,
@@ -270,7 +271,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--repeats", type=int, default=3)
 
-    # LNS params (alignés benchmark1)
+    # LNS params
     parser.add_argument("--lns-neighborhood-size", type=float, default=0.30)
     parser.add_argument("--lns-policy", type=str, default="random",
                         choices=["random", "center_fix", "edge_fix", "unstable_relax"])
@@ -278,7 +279,7 @@ def main():
     parser.add_argument("--lns-initial-time", type=float, default=1.0)
     parser.add_argument("--lns-multistart", action="store_true")
 
-    # Min-conflicts params (alignés benchmark1)
+    # Min-conflicts params
     parser.add_argument("--mc-noise", type=float, default=0.15)
     parser.add_argument("--mc-max-steps", type=int, default=3000)
     parser.add_argument("--mc-pick-policy", type=str, default="max_conflict",
@@ -296,7 +297,7 @@ def main():
     ns = list(range(args.n_min, args.n_max + 1, args.n_step))
     run_dir = _make_run_dir(Path(args.runs_dir), args)
 
-    # save config
+    # save config utilisée
     (run_dir / "run_config.json").write_text(
         json.dumps(vars(args), indent=2, ensure_ascii=False),
         encoding="utf-8"

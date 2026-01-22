@@ -11,7 +11,6 @@ from typing import Any, Callable, Dict, List
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Solveurs (architecture actuelle)
 from solvers.complete.cp_sat_fixed_search_first_fail import CPSatFirstFailSolver
 from solvers.complete.cp_sat_fixed_search_center_out import CPSatCenterOutSolver
 from solvers.incomplete.cp_sat_lns import CPSatLNSSolver
@@ -26,7 +25,6 @@ class MethodSpec:
 
 
 def _safe(s: str) -> str:
-    # pour noms de dossiers/fichiers
     return "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in s)
 
 
@@ -49,12 +47,14 @@ def run_benchmark_solutions(
     symmetry_breaking: bool,
     seed: int,
     repeats: int,
+
     # LNS params
     lns_neighborhood_size: float,
     lns_policy: str,
     lns_time_per_iter: float,
     lns_initial_time: float,
     lns_multistart: bool,
+
     # Min-conflicts params
     mc_noise: float,
     mc_max_steps: int,
@@ -119,13 +119,12 @@ def run_benchmark_solutions(
     for n in ns:
         for m in methods:
             for rep in range(repeats):
-                run_seed = seed + rep  # reproductible
+                run_seed = seed + rep
 
                 solver = m.build(n, symmetry_breaking, run_seed)
 
                 t0 = time.time()
 
-                # LNS: activer le mode itératif si demandé
                 if m.name == "INCOMPLETE_lns":
                     result = solver.solve(
                         time_limit=time_limit,
@@ -247,7 +246,7 @@ def main():
     config_json = run_dir / "config.json"
     log_txt = run_dir / "log.txt"
 
-    # dump config
+    # dump config utilisée
     with config_json.open("w", encoding="utf-8") as f:
         json.dump(vars(args), f, indent=2)
 
