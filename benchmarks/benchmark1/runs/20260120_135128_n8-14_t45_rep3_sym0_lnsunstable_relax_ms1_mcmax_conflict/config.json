@@ -1,0 +1,17 @@
+{
+  "n_min": 8,
+  "n_max": 14,
+  "time_limit": 45.0,
+  "symmetry_breaking": false,
+  "seed": 42,
+  "repeats": 3,
+  "lns_neighborhood_size": 0.3,
+  "lns_policy": "unstable_relax",
+  "lns_time_per_iter": 0.1,
+  "lns_initial_time": 1.0,
+  "lns_multistart": true,
+  "mc_noise": 0.15,
+  "mc_max_steps": 3000,
+  "mc_pick_policy": "max_conflict",
+  "out_root": "benchmarks/benchmark1/runs"
+}
